@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- res/values/styles.xml -->
+<resources>
+    <!-- 2.1. Base app theme must extend Material3 NoActionBar -->
+    <style name="Theme.MyApp" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Tie our custom SearchView style into the theme -->
+        <item name="searchViewStyle">@style/Widget.MyApp.SearchView</item>
+    </style>
+
+    <!-- 2.2. Our pill‑shaped SearchView style -->
+    <style name="Widget.MyApp.SearchView" parent="Widget.Material3.SearchView">
+        <!-- apply the pill background -->
+        <item name="android:background">@drawable/search_view_bg</item>
+        <!-- remove any default elevation/shadow -->
+        <item name="android:elevation">0dp</item>
+        <!-- ensure the text and hint look good on surface -->
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textColorHint">?attr/colorOnSurfaceVariant</item>
+        <!-- set the internal height -->
+        <item name="android:layout_height">56dp</item>
+        <!-- control padding inside the pill -->
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+    </style>
+
+    <!-- 2.3. (Optional) Customize hint typography -->
+    <style name="TextAppearance.MyApp.SearchView.Hint" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+</resources>

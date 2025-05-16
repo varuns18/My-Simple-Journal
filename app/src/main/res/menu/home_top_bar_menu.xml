@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- Compose icon -->
+    <item
+        android:id="@+id/action_compose"
+        android:title="edit"
+        android:icon="@drawable/ic_edit_24"
+        app:showAsAction="ifRoom"/>
+
+    <!-- Profile/avatar icon -->
+    <item
+        android:id="@+id/action_profile"
+        android:title="profile"
+        android:icon="@drawable/ic_launcher_background"
+        app:showAsAction="always"/>
+
+    <!-- Overflow -->
+    <item
+        android:id="@+id/action_more"
+        android:title="more"
+        android:icon="@drawable/ic_arrow_down_24"
+        app:showAsAction="never"/>
+</menu>
