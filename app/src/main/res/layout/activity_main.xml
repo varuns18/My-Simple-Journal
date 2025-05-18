@@ -37,16 +37,18 @@
         android:layout_marginBottom="32dp"
         android:contentDescription="New Entry"
         android:text="New Entry"
+        android:transitionName="shared_element_to_compose"
         app:icon="@drawable/ic_add_24"/>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:paddingStart="16dp"
+        android:paddingStart="8dp"
         android:paddingTop="16dp"
+        android:transitionGroup="true"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-        android:paddingEnd="16dp"
+        android:paddingEnd="8dp"
         android:clipToPadding="false"
         tools:listitem="@layout/recyclerview_item"
         app:layout_behavior="@string/appbar_scrolling_view_behavior"/>

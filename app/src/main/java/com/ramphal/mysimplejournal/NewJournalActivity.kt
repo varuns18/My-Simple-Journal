@@ -3,24 +3,38 @@ package com.ramphal.mysimplejournal
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.View
+import android.view.Window
 import android.view.inputmethod.InputMethodManager
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator
+import androidx.lifecycle.lifecycleScope
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.datepicker.MaterialDatePicker.Builder.datePicker
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.transition.platform.MaterialArcMotion
+import com.google.android.material.transition.platform.MaterialContainerTransform
+import com.google.android.material.transition.platform.MaterialContainerTransformSharedElementCallback
+import com.ramphal.mysimplejournal.JournalDetailActivity
+import com.ramphal.mysimplejournal.data.DailyJournalDao
+import com.ramphal.mysimplejournal.data.DailyJournalModel
 import com.ramphal.mysimplejournal.databinding.ActivityNewJournalBinding
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -31,8 +45,9 @@ class NewJournalActivity : AppCompatActivity() {
     private var journalTitlesList: List<String>? = null
     private var customColorList: List<Int>? = null
     private var titleIndex: Int = -1
-    private var colorIndex: Int = -1
+    private var colorIndex: Int = 0
     private var datePicker: MaterialDatePicker<Long?>? = null
+    private var selectedImageUri: Uri? = null
     val requestPermission: ActivityResultLauncher<Array<String>> =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()){
                 permissions->
@@ -60,14 +75,21 @@ class NewJournalActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
                 result->
             if (result.resultCode == RESULT_OK && result.data != null){
-                binding?.ivImage?.setImageURI(result.data?.data)
+                val uri = result.data!!.data!!
+                selectedImageUri = uri
+                binding?.ivImage?.setImageURI(uri)
                 binding?.imageCard?.visibility = View.VISIBLE
             }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        window.requestFeature(Window.FEATURE_ACTIVITY_TRANSITIONS)
         binding = ActivityNewJournalBinding.inflate(layoutInflater)
+        setContentView(binding?.main)
+        setExitSharedElementCallback(MaterialContainerTransformSharedElementCallback())
+        window.sharedElementEnterTransition = buildTransitions()
+        window.sharedElementReturnTransition = buildTransitions()
+        window.sharedElementExitTransition = buildTransitions()
         journalTitlesList = Constant.getJournalTitlesList()
         customColorList = Constant.getCustomColorList()
         datePicker = datePicker()
@@ -75,7 +97,8 @@ class NewJournalActivity : AppCompatActivity() {
             .setInputMode(MaterialDatePicker.INPUT_MODE_CALENDAR)  // Show calendar view
             .build()
         enableEdgeToEdge()
-        setContentView(binding?.main)
+        super.onCreate(savedInstanceState)
+        val journalDao = (application as MyJournalApp).db.dailyJournalDao()
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
@@ -87,8 +110,30 @@ class NewJournalActivity : AppCompatActivity() {
             view.setPadding(0, 0, 0, imeHeight)
             insets
         }
-        binding?.appBarLayout?.setBackgroundColor(ContextCompat.getColor(this@NewJournalActivity, R.color.surface))
-        newTitle()
+        val journalId = intent.getIntExtra("id", -1)
+        if (journalId != -1){
+            lifecycleScope.launch {
+                journalDao.getById(journalId).collect{
+                    it?.let {
+                        binding?.tvTitle?.text = it.title
+                        binding?.journalEntry?.setText(it.content)
+                        binding?.btnDate?.text = it.date
+                        binding?.main?.setBackgroundColor(getColor(customColorList!![it.color]))
+                        binding?.appBarLayout?.setBackgroundColor(getColor(customColorList!![it.color]))
+                        binding?.main?.statusBarBackground = ContextCompat.getDrawable(this@NewJournalActivity, customColorList!![it.color])
+                        it.image?.let { it1 ->
+                            binding?.ivImage?.setImageURI(it1.toUri())
+                            binding?.imageCard?.visibility = View.VISIBLE
+                        }
+                    }
+                }
+            }
+        }else{
+            binding?.appBarLayout?.setBackgroundColor(ContextCompat.getColor(this@NewJournalActivity, R.color.surface))
+            newTitle()
+            newColor()
+        }
+
         binding?.btnNewTitle?.setOnClickListener {
             newTitle()
         }
@@ -119,6 +164,92 @@ class NewJournalActivity : AppCompatActivity() {
             binding?.imageCard?.visibility = View.GONE
         }
 
+        binding?.toolBar?.setNavigationOnClickListener {
+            onBackPressed()
+        }
+
+        binding?.toolBar?.setOnMenuItemClickListener {
+            when(it.itemId) {
+                R.id.action_save -> {
+                    if (journalId == -1){
+                        saveData(journalDao)
+                    }else{
+                        updateData(journalDao, journalId)
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
+    }
+
+    private fun updateData(journalDao: DailyJournalDao, id: Int) {
+
+        val title = binding?.tvTitle?.text.toString()
+        val date = binding?.btnDate?.text.toString()
+        val entry = binding?.journalEntry?.text.toString()
+        val color = colorIndex
+        val imagePath = selectedImageUri?.toString() ?: ""
+
+        if (title.isNotEmpty() && date.isNotEmpty() && entry.isNotEmpty()){
+            lifecycleScope.launch {
+                journalDao.update(
+                    DailyJournalModel(
+                        id = id,
+                        title = title,
+                        date = date,
+                        content = entry,
+                        image = imagePath,
+                        color = color
+                    )
+                )
+                Toast.makeText(applicationContext, "Journal Updated", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }else{
+            Snackbar.make(binding?.main!!,"Please Write Something to Save", Snackbar.LENGTH_SHORT).show()
+        }
+
+    }
+
+    fun saveData(journalDao: DailyJournalDao){
+
+        val title = binding?.tvTitle?.text.toString()
+        val date = binding?.btnDate?.text.toString()
+        val entry = binding?.journalEntry?.text.toString()
+        val color = colorIndex
+        val imagePath = selectedImageUri?.toString() ?: ""
+
+        if (title.isNotEmpty() && date.isNotEmpty() && entry.isNotEmpty()){
+            lifecycleScope.launch {
+                journalDao.insert(
+                    DailyJournalModel(
+                        title = title,
+                        date = date,
+                        content = entry,
+                        image = imagePath,
+                        color = color
+                    )
+                )
+                Toast.makeText(applicationContext, "Journal Saved", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }else{
+            Snackbar.make(binding?.main!!,"Please Write Something to Save", Snackbar.LENGTH_SHORT).show()
+        }
+
+    }
+
+    private fun buildTransitions(): MaterialContainerTransform {
+        return MaterialContainerTransform().apply {
+            addTarget(R.id.main)
+            setAllContainerColors(ContextCompat.getColor(this@NewJournalActivity, R.color.surface))
+            duration = 400
+            pathMotion = MaterialArcMotion()
+            interpolator = FastOutSlowInInterpolator()
+            fadeMode = MaterialContainerTransform.FADE_MODE_IN
+        }
     }
 
     private fun onEditBtnClicked(){
@@ -185,7 +316,7 @@ class NewJournalActivity : AppCompatActivity() {
     }
 
     private fun newColor() {
-        colorIndex = (colorIndex + 1) % customColorList!!.size
+        colorIndex = (0..19).random()
         binding?.main?.setBackgroundColor(ContextCompat.getColor(this@NewJournalActivity, customColorList!![colorIndex]))
         binding?.appBarLayout?.setBackgroundColor(ContextCompat.getColor(this@NewJournalActivity, customColorList!![colorIndex]))
         binding?.main?.statusBarBackground = ContextCompat.getDrawable(this@NewJournalActivity, customColorList!![colorIndex])
